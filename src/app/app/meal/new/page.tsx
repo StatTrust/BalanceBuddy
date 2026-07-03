@@ -42,8 +42,8 @@ export default function NewMealPage() {
       <h1 className="text-3xl font-black text-ink">Check a Meal</h1>
       <Card>
         <div className="grid gap-4">
-          <Field label="Meal photo">
-            <input className="rounded-md border bg-white p-3" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+          <Field label="Meal photo" hint="Take a new photo or choose one from your camera roll. JPG, PNG, or WebP works best.">
+            <input className="rounded-md border bg-white p-3" type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           </Field>
           <Field label="Optional context" hint="Ingredients, portion size, restaurant, sauce, drink, or prep details.">
             <textarea className="min-h-28 rounded-md border px-3 py-2" value={context} onChange={(e) => setContext(e.target.value)} />

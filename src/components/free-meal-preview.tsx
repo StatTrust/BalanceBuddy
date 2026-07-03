@@ -93,7 +93,6 @@ export function FreeMealPreview() {
                 className="rounded-md border bg-white p-3"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                capture="environment"
                 onChange={(e) => {
                   const nextFile = e.target.files?.[0] ?? null;
                   setFile(nextFile);
@@ -102,6 +101,7 @@ export function FreeMealPreview() {
                   setSelectedFileLabel(nextFile ? `${nextFile.name || "Selected photo"} · ${formatBytes(nextFile.size)}` : "");
                 }}
               />
+              <span className="text-xs font-normal text-slate-500">Take a new photo or choose one from your camera roll. JPG, PNG, or WebP works best.</span>
             </Field>
             {selectedFileLabel ? <p className="rounded-md bg-slate-50 p-3 text-xs font-semibold text-slate-600">Selected: {selectedFileLabel}</p> : null}
             <Field label="Your goal">
