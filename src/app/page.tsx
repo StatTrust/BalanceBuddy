@@ -10,7 +10,7 @@ export default function LandingPage() {
     <main className="min-h-screen bg-slate-50">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
         <span className="text-base font-black tracking-tight text-ink">Meal Coach</span>
-        <Link className="text-sm font-semibold text-slate-700" href="/login">Tester login</Link>
+        <Link className="text-sm font-semibold text-slate-700" href="/login">Waitlist login</Link>
       </header>
       <section className="mx-auto grid max-w-6xl gap-8 px-4 pb-10 pt-6 md:grid-cols-[1.05fr_.95fr] md:items-center md:pt-12">
         <div>

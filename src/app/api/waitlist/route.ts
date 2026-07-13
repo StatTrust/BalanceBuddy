@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sendLifecycleEvent } from "@/lib/ghl";
 import { env } from "@/lib/env";
-import { createSupabaseAdminClient, hasSupabaseConfig } from "@/lib/supabase-server";
+import { createSupabaseAdminClient, createSupabaseServerClient, hasSupabaseConfig } from "@/lib/supabase-server";
+import { hasWaitlistAccess } from "@/lib/waitlist";
 
 const waitlistSchema = z.object({
   name: z.string().min(1).max(120),
@@ -13,6 +14,18 @@ const waitlistSchema = z.object({
   source: z.string().max(120).optional(),
   triedFreeScan: z.boolean().default(false),
 });
+
+export async function GET() {
+  if (!hasSupabaseConfig()) {
+    return NextResponse.json({ authenticated: false, waitlisted: false });
+  }
+
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  const waitlisted = await hasWaitlistAccess(user?.email);
+
+  return NextResponse.json({ authenticated: Boolean(user), waitlisted });
+}
 
 export async function POST(request: Request) {
   const parsed = waitlistSchema.safeParse(await request.json());
@@ -49,10 +62,10 @@ export async function POST(request: Request) {
     ok: true,
     stored: Boolean(hasSupabaseConfig() && env.SUPABASE_SERVICE_ROLE_KEY),
   });
-  response.cookies.set("waitlist_unlocked", "true", {
+  response.cookies.set("waitlist_unlocked", "", {
     httpOnly: true,
     sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
+    maxAge: 0,
     path: "/",
   });
   return response;

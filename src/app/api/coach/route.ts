@@ -15,8 +15,8 @@ export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "Log in first." }, { status: 401 });
-  const access = await getSubscriptionAccess(user.id);
-  if (!access.active) return NextResponse.json({ error: "Active subscription required." }, { status: 402 });
+  const access = await getSubscriptionAccess(user.id, user.email);
+  if (!access.active) return NextResponse.json({ error: "Join the waitlist to use the coach." }, { status: 403 });
   const limit = await enforceDailyLimit("coach", user.id);
   if (!limit.success) return NextResponse.json({ error: "You reached today's coach message limit." }, { status: 429 });
 

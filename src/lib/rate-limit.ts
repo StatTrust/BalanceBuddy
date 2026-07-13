@@ -8,6 +8,7 @@ const redis =
     : null;
 
 export async function enforceDailyLimit(kind: "meal" | "coach", userId: string) {
+  if (env.WAITLIST_MODE === "true") return { success: true, remaining: null };
   if (!redis) return { success: true, remaining: null };
   const limit = kind === "meal" ? env.MEAL_SCANS_PER_DAY : env.COACH_MESSAGES_PER_DAY;
   const limiter = new Ratelimit({

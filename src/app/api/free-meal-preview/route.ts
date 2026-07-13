@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { analyzeMealWithAI } from "@/lib/openai";
 import { env } from "@/lib/env";
-import { createSupabaseAdminClient, hasSupabaseConfig } from "@/lib/supabase-server";
+import { createSupabaseAdminClient, createSupabaseServerClient, hasSupabaseConfig } from "@/lib/supabase-server";
+import { hasWaitlistAccess } from "@/lib/waitlist";
 
 const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 const maxBytes = 6 * 1024 * 1024;
@@ -20,7 +21,9 @@ export async function POST(request: Request) {
 
   const isLocalTest = new URL(request.url).hostname === "localhost";
   const cookieHeader = request.headers.get("cookie") || "";
-  const unlocked = cookieHeader.includes("waitlist_unlocked=true") || request.headers.get("x-waitlist-unlocked") === "true";
+  const supabase = hasSupabaseConfig() ? await createSupabaseServerClient() : null;
+  const { data: { user } } = supabase ? await supabase.auth.getUser() : { data: { user: null } };
+  const unlocked = await hasWaitlistAccess(user?.email);
   const used = cookieHeader.includes("free_meal_preview_used=true");
   if (used && !unlocked && !isLocalTest) {
     return NextResponse.json({ error: "You already used your free meal check. Join the waitlist for early access." }, { status: 429 });

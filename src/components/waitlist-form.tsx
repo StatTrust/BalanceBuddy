@@ -1,16 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { Button, Field } from "@/components/ui";
+import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 export function WaitlistForm({
   triedFreeScan = false,
   onJoined,
   compact = false,
+  source = "landing_page",
+  buttonLabel = "Join the Waitlist",
 }: {
   triedFreeScan?: boolean;
   onJoined?: () => void;
   compact?: boolean;
+  source?: string;
+  buttonLabel?: string;
 }) {
   const [form, setForm] = useState({
     name: "",
@@ -26,43 +31,66 @@ export function WaitlistForm({
     setForm((current) => ({ ...current, [name]: value }));
   }
 
-  async function submit() {
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setLoading(true);
     setMessage("");
-    const res = await fetch("/api/waitlist", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        ...form,
-        source: "landing_page",
-        triedFreeScan,
-      }),
-    });
-    const body = await res.json();
-    setLoading(false);
-    if (!res.ok) {
-      setMessage(body.error || "Could not save your spot yet.");
-      return;
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          source,
+          triedFreeScan,
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setMessage(body.error || "Could not save your spot yet.");
+        return;
+      }
+
+      const supabase = createSupabaseBrowserClient();
+      const { error } = await supabase.auth.signInWithOtp({
+        email: form.email.trim().toLowerCase(),
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+          data: { name: form.name },
+        },
+      });
+
+      window.sessionStorage.setItem("mealCoachWaitlistFormCompleted", "true");
+      window.dispatchEvent(new Event("mealCoachWaitlistFormCompleted"));
+      onJoined?.();
+
+      if (error) {
+        setMessage("Your spot is saved, but the login email could not be sent. Use Waitlist login to try again.");
+        return;
+      }
+
+      setMessage("You're on the waitlist. Check your email and tap the secure link to activate unlimited access.");
+    } catch {
+      setMessage("Could not create your waitlist account yet. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    window.localStorage.setItem("mealCoachWaitlistJoined", "true");
-    window.dispatchEvent(new Event("mealCoachWaitlistJoined"));
-    setMessage(body.stored ? "You're on the waitlist. We'll send early access details soon." : "You're on the list for this preview. Next step is connecting the database so we can collect real signups.");
-    onJoined?.();
   }
 
   return (
-    <div className="grid gap-3">
+    <form className="grid gap-3" onSubmit={submit}>
       <div className={compact ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
         <Field label="Name">
-          <input className="min-h-11 rounded-md border px-3" value={form.name} onChange={(e) => update("name", e.target.value)} />
+          <input className="min-h-11 rounded-md border px-3" value={form.name} onChange={(e) => update("name", e.target.value)} autoComplete="name" required />
         </Field>
         <Field label="Email">
-          <input className="min-h-11 rounded-md border px-3" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} />
+          <input className="min-h-11 rounded-md border px-3" type="email" value={form.email} onChange={(e) => update("email", e.target.value)} autoComplete="email" required />
         </Field>
       </div>
       <div className={compact ? "grid gap-3" : "grid gap-3 sm:grid-cols-2"}>
         <Field label="Phone" hint="Optional">
-          <input className="min-h-11 rounded-md border px-3" type="tel" value={form.phoneNumber} onChange={(e) => update("phoneNumber", e.target.value)} />
+          <input className="min-h-11 rounded-md border px-3" type="tel" value={form.phoneNumber} onChange={(e) => update("phoneNumber", e.target.value)} autoComplete="tel" />
         </Field>
         <Field label="Main goal">
           <select className="min-h-11 rounded-md border px-3" value={form.primaryGoal} onChange={(e) => update("primaryGoal", e.target.value)}>
@@ -77,8 +105,8 @@ export function WaitlistForm({
           </select>
         </Field>
       </div>
-      <Button onClick={submit} disabled={loading}>{loading ? "Saving..." : "Join the Waitlist"}</Button>
+      <Button type="submit" disabled={loading}>{loading ? "Creating account..." : buttonLabel}</Button>
       {message ? <p className="rounded-md bg-slate-100 p-3 text-sm font-semibold text-slate-700">{message}</p> : null}
-    </div>
+    </form>
   );
 }

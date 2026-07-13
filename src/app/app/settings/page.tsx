@@ -15,8 +15,8 @@ export default function SettingsPage() {
     <div className="grid gap-4">
       <h1 className="text-3xl font-black text-ink">Settings</h1>
       <Card>
-        <h2 className="font-bold">Beta access</h2>
-        <p className="mt-2 text-sm text-slate-600">Billing is paused while we validate the waitlist and first tester experience.</p>
+        <h2 className="font-bold">Waitlist access</h2>
+        <p className="mt-2 text-sm text-slate-600">Your signed-in waitlist account includes unlimited access during the MVP rollout.</p>
       </Card>
       <Card>
         <h2 className="font-bold">Account</h2>

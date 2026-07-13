@@ -10,8 +10,9 @@ export default async function SubscribePage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const access = await getSubscriptionAccess(user.id);
+  const access = await getSubscriptionAccess(user.id, user.email);
   if (access.active && env.WAITLIST_MODE !== "true") redirect("/app");
+  if (access.active && env.WAITLIST_MODE === "true") redirect("/app/meal/new");
 
   if (env.WAITLIST_MODE === "true") {
     return (
@@ -19,11 +20,11 @@ export default async function SubscribePage() {
         <h1 className="text-3xl font-black text-ink">The beta is invite-first.</h1>
         <Card>
           <p className="mb-4 text-sm leading-6 text-slate-600">
-            We are not collecting payment yet. Join the waitlist, try the preview, and we will invite the first testers before turning on billing.
+            We are not collecting payment yet. Create a waitlist account to unlock the app while we shape the first release.
           </p>
           <WaitlistForm />
         </Card>
-        <LinkButton href="/app" variant="secondary">Continue as tester</LinkButton>
+        <LinkButton href="/login" variant="secondary">Waitlist login</LinkButton>
         <WellnessNotice />
       </main>
     );

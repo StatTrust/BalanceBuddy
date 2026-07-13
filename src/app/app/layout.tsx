@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Home, MessageSquare, Scale, Settings, Utensils } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase";
+import { getSubscriptionAccess } from "@/lib/billing";
 
 const nav = [
   ["/app", Home, "Home"],
@@ -14,6 +15,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+  const access = await getSubscriptionAccess(user.id, user.email);
+  if (!access.active) redirect("/signup");
 
   return (
     <div className="min-h-screen bg-slate-50 pb-20">

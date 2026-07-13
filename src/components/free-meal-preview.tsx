@@ -19,25 +19,47 @@ export function FreeMealPreview() {
   const [used, setUsed] = useState(false);
   const [selectedFileLabel, setSelectedFileLabel] = useState("");
   const [previewUrl, setPreviewUrl] = useState("");
-  const [waitlistJoined, setWaitlistJoined] = useState(false);
+  const [waitlistAccess, setWaitlistAccess] = useState(false);
+  const [waitlistFormCompleted, setWaitlistFormCompleted] = useState(false);
   const allowRepeatLocalTests = typeof window !== "undefined" && window.location.hostname === "localhost";
+  const analysisRevealed = waitlistAccess || waitlistFormCompleted;
 
   useEffect(() => {
-    function unlockWaitlistAccess() {
-      setWaitlistJoined(true);
-      setUsed(false);
+    let active = true;
+
+    function revealCurrentAnalysis() {
+      setWaitlistFormCompleted(true);
     }
-    const joined = window.localStorage.getItem("mealCoachWaitlistJoined") === "true";
-    setWaitlistJoined(joined);
+
+    async function loadWaitlistAccess() {
+      try {
+        const response = await fetch("/api/waitlist", { cache: "no-store" });
+        const body = await response.json();
+        if (active && body.authenticated && body.waitlisted) {
+          setWaitlistAccess(true);
+          setUsed(false);
+        }
+      } catch {
+        // The public preview still works once if session status cannot be loaded.
+      }
+    }
+
+    window.localStorage.removeItem("mealCoachWaitlistJoined");
+    setWaitlistFormCompleted(window.sessionStorage.getItem("mealCoachWaitlistFormCompleted") === "true");
+    void loadWaitlistAccess();
+
     if (window.location.hostname === "localhost") {
       window.localStorage.removeItem("mealCoachFreePreviewUsed");
       setUsed(false);
-      window.addEventListener("mealCoachWaitlistJoined", unlockWaitlistAccess);
-      return () => window.removeEventListener("mealCoachWaitlistJoined", unlockWaitlistAccess);
+    } else {
+      setUsed(window.localStorage.getItem("mealCoachFreePreviewUsed") === "true");
     }
-    setUsed(window.localStorage.getItem("mealCoachFreePreviewUsed") === "true");
-    window.addEventListener("mealCoachWaitlistJoined", unlockWaitlistAccess);
-    return () => window.removeEventListener("mealCoachWaitlistJoined", unlockWaitlistAccess);
+
+    window.addEventListener("mealCoachWaitlistFormCompleted", revealCurrentAnalysis);
+    return () => {
+      active = false;
+      window.removeEventListener("mealCoachWaitlistFormCompleted", revealCurrentAnalysis);
+    };
   }, []);
 
   useEffect(() => {
@@ -73,7 +95,6 @@ export function FreeMealPreview() {
         method: "POST",
         body: form,
         signal: controller.signal,
-        headers: waitlistJoined ? { "x-waitlist-unlocked": "true" } : undefined,
       });
       window.clearTimeout(timeout);
       const body = await parseJsonResponse(res);
@@ -83,7 +104,7 @@ export function FreeMealPreview() {
         if (res.status === 429) setUsed(true);
         return;
       }
-      if (!allowRepeatLocalTests && !waitlistJoined) {
+      if (!allowRepeatLocalTests && !waitlistAccess) {
         window.localStorage.setItem("mealCoachFreePreviewUsed", "true");
         setUsed(true);
       }
@@ -108,7 +129,7 @@ export function FreeMealPreview() {
         </p>
       </div>
       <Card>
-        {(!used || waitlistJoined) && !analysis ? (
+        {(!used || waitlistAccess) && !analysis ? (
           <div className="grid gap-4">
             <Field label="Meal photo">
               <input
@@ -142,31 +163,30 @@ export function FreeMealPreview() {
             <Button className="gap-2" onClick={submit} disabled={Boolean(status) || !file}><Camera size={18} />{status ? "Checking..." : "Analyze my meal"}</Button>
             {status ? <p className="rounded-md bg-slate-50 p-3 text-sm font-semibold text-action">{status}</p> : null}
             {error ? <p className="rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">{error}</p> : null}
-            {waitlistJoined ? <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-action">Waitlist access unlocked. You can analyze more meals from this device.</p> : null}
+            {waitlistAccess ? <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-action">Signed in with waitlist access. Unlimited meal checks are unlocked.</p> : null}
             <WellnessNotice />
           </div>
         ) : (
           <div className="grid gap-4">
             {analysis ? (
               <div className="relative">
-                <div className={waitlistJoined ? "" : "pointer-events-none select-none blur-md"}>
+                <div className={analysisRevealed ? "" : "pointer-events-none select-none blur-md"}>
                   <MealPreviewResult analysis={analysis} imageUrl={previewUrl} />
                 </div>
-                {!waitlistJoined ? (
+                {!analysisRevealed ? (
                   <div className="absolute inset-0 grid place-items-center rounded-lg bg-white/75 p-3 backdrop-blur-sm">
                     <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
                       <div className="flex items-center gap-2 font-black text-ink"><Lock size={18} />Unlock your meal check</div>
                       <p className="mb-4 mt-2 text-sm leading-6 text-slate-600">
-                        Join the waitlist to reveal this analysis and unlock unlimited meal checks from this device.
+                        Create your waitlist account to reveal this analysis. Then tap the secure email link to unlock unlimited meal checks anywhere you sign in.
                       </p>
                       <WaitlistForm
                         compact
                         triedFreeScan
+                        source="meal_analysis_gate"
+                        buttonLabel="Create waitlist account"
                         onJoined={() => {
-                          window.localStorage.setItem("mealCoachWaitlistJoined", "true");
-                          window.localStorage.removeItem("mealCoachFreePreviewUsed");
-                          setWaitlistJoined(true);
-                          setUsed(false);
+                          setWaitlistFormCompleted(true);
                         }}
                       />
                     </div>
@@ -176,22 +196,26 @@ export function FreeMealPreview() {
             ) : (
               <div className="rounded-md bg-slate-100 p-4">
                 <div className="flex items-center gap-2 font-bold text-ink"><Lock size={18} />Free preview used</div>
-                <p className="mt-2 text-sm leading-6 text-slate-600">Join the waitlist to unlock more meal checks from this device.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Create a waitlist account, then use the secure email link to unlock unlimited meal checks.</p>
                 <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
                   <WaitlistForm
                     compact
                     triedFreeScan
+                    source="free_preview_used"
+                    buttonLabel="Create waitlist account"
                     onJoined={() => {
-                      window.localStorage.setItem("mealCoachWaitlistJoined", "true");
-                      window.localStorage.removeItem("mealCoachFreePreviewUsed");
-                      setWaitlistJoined(true);
-                      setUsed(false);
+                      setWaitlistFormCompleted(true);
                     }}
                   />
                 </div>
               </div>
             )}
-            {waitlistJoined ? (
+            {waitlistFormCompleted && !waitlistAccess ? (
+              <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-action">
+                Your result is unlocked. Tap the secure link in your email to sign in and analyze more meals.
+              </p>
+            ) : null}
+            {waitlistAccess ? (
               <button
                 className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-ink"
                 onClick={() => {
