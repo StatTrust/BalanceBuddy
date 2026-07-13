@@ -18,16 +18,33 @@ export function FreeMealPreview() {
   const [analysis, setAnalysis] = useState<MealAnalysis | null>(null);
   const [used, setUsed] = useState(false);
   const [selectedFileLabel, setSelectedFileLabel] = useState("");
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [waitlistJoined, setWaitlistJoined] = useState(false);
   const allowRepeatLocalTests = typeof window !== "undefined" && window.location.hostname === "localhost";
 
   useEffect(() => {
+    function unlockWaitlistAccess() {
+      setWaitlistJoined(true);
+      setUsed(false);
+    }
+    const joined = window.localStorage.getItem("mealCoachWaitlistJoined") === "true";
+    setWaitlistJoined(joined);
     if (window.location.hostname === "localhost") {
       window.localStorage.removeItem("mealCoachFreePreviewUsed");
       setUsed(false);
-      return;
+      window.addEventListener("mealCoachWaitlistJoined", unlockWaitlistAccess);
+      return () => window.removeEventListener("mealCoachWaitlistJoined", unlockWaitlistAccess);
     }
     setUsed(window.localStorage.getItem("mealCoachFreePreviewUsed") === "true");
+    window.addEventListener("mealCoachWaitlistJoined", unlockWaitlistAccess);
+    return () => window.removeEventListener("mealCoachWaitlistJoined", unlockWaitlistAccess);
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
   async function submit() {
     if (!file) {
@@ -52,7 +69,12 @@ export function FreeMealPreview() {
 
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 70000);
-      const res = await fetch("/api/free-meal-preview", { method: "POST", body: form, signal: controller.signal });
+      const res = await fetch("/api/free-meal-preview", {
+        method: "POST",
+        body: form,
+        signal: controller.signal,
+        headers: waitlistJoined ? { "x-waitlist-unlocked": "true" } : undefined,
+      });
       window.clearTimeout(timeout);
       const body = await parseJsonResponse(res);
 
@@ -61,7 +83,7 @@ export function FreeMealPreview() {
         if (res.status === 429) setUsed(true);
         return;
       }
-      if (!allowRepeatLocalTests) {
+      if (!allowRepeatLocalTests && !waitlistJoined) {
         window.localStorage.setItem("mealCoachFreePreviewUsed", "true");
         setUsed(true);
       }
@@ -86,7 +108,7 @@ export function FreeMealPreview() {
         </p>
       </div>
       <Card>
-        {!used && !analysis ? (
+        {(!used || waitlistJoined) && !analysis ? (
           <div className="grid gap-4">
             <Field label="Meal photo">
               <input
@@ -98,7 +120,12 @@ export function FreeMealPreview() {
                   setFile(nextFile);
                   setAnalysis(null);
                   setError("");
+                  setUsed(false);
                   setSelectedFileLabel(nextFile ? `${nextFile.name || "Selected photo"} · ${formatBytes(nextFile.size)}` : "");
+                  setPreviewUrl((currentUrl) => {
+                    if (currentUrl) URL.revokeObjectURL(currentUrl);
+                    return nextFile ? URL.createObjectURL(nextFile) : "";
+                  });
                 }}
               />
               <span className="text-xs font-normal text-slate-500">Take a new photo or choose one from your camera roll. JPG, PNG, or WebP works best.</span>
@@ -112,24 +139,76 @@ export function FreeMealPreview() {
             <Field label="Optional context" hint="Restaurant, portion size, sauce, drink, or prep details.">
               <textarea className="min-h-24 rounded-md border px-3 py-2" value={context} onChange={(e) => setContext(e.target.value)} />
             </Field>
-            <Button className="gap-2" onClick={submit} disabled={Boolean(status) || !file}><Camera size={18} />{status ? "Checking..." : "Run my free meal check"}</Button>
+            <Button className="gap-2" onClick={submit} disabled={Boolean(status) || !file}><Camera size={18} />{status ? "Checking..." : "Analyze my meal"}</Button>
             {status ? <p className="rounded-md bg-slate-50 p-3 text-sm font-semibold text-action">{status}</p> : null}
             {error ? <p className="rounded-md bg-amber-50 p-3 text-sm font-semibold text-amber-800">{error}</p> : null}
+            {waitlistJoined ? <p className="rounded-md bg-emerald-50 p-3 text-sm font-semibold text-action">Waitlist access unlocked. You can analyze more meals from this device.</p> : null}
             <WellnessNotice />
           </div>
         ) : (
           <div className="grid gap-4">
-            {analysis ? <MealPreviewResult analysis={analysis} /> : (
+            {analysis ? (
+              <div className="relative">
+                <div className={waitlistJoined ? "" : "pointer-events-none select-none blur-md"}>
+                  <MealPreviewResult analysis={analysis} imageUrl={previewUrl} />
+                </div>
+                {!waitlistJoined ? (
+                  <div className="absolute inset-0 grid place-items-center rounded-lg bg-white/75 p-3 backdrop-blur-sm">
+                    <div className="w-full max-w-md rounded-lg border border-slate-200 bg-white p-4 shadow-lg">
+                      <div className="flex items-center gap-2 font-black text-ink"><Lock size={18} />Unlock your meal check</div>
+                      <p className="mb-4 mt-2 text-sm leading-6 text-slate-600">
+                        Join the waitlist to reveal this analysis and unlock unlimited meal checks from this device.
+                      </p>
+                      <WaitlistForm
+                        compact
+                        triedFreeScan
+                        onJoined={() => {
+                          window.localStorage.setItem("mealCoachWaitlistJoined", "true");
+                          window.localStorage.removeItem("mealCoachFreePreviewUsed");
+                          setWaitlistJoined(true);
+                          setUsed(false);
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : (
               <div className="rounded-md bg-slate-100 p-4">
                 <div className="flex items-center gap-2 font-bold text-ink"><Lock size={18} />Free preview used</div>
-                <p className="mt-2 text-sm leading-6 text-slate-600">Join the waitlist and we will invite you when the full beta is ready.</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">Join the waitlist to unlock more meal checks from this device.</p>
+                <div className="mt-4 rounded-md border border-slate-200 bg-white p-4">
+                  <WaitlistForm
+                    compact
+                    triedFreeScan
+                    onJoined={() => {
+                      window.localStorage.setItem("mealCoachWaitlistJoined", "true");
+                      window.localStorage.removeItem("mealCoachFreePreviewUsed");
+                      setWaitlistJoined(true);
+                      setUsed(false);
+                    }}
+                  />
+                </div>
               </div>
             )}
-            <div className="rounded-md border border-slate-200 bg-white p-4">
-              <h3 className="text-lg font-black text-ink">Want early access?</h3>
-              <p className="mb-4 mt-1 text-sm text-slate-600">Join the waitlist. No payment required.</p>
-              <WaitlistForm triedFreeScan />
-            </div>
+            {waitlistJoined ? (
+              <button
+                className="min-h-11 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-ink"
+                onClick={() => {
+                  setAnalysis(null);
+                  setFile(null);
+                  setSelectedFileLabel("");
+                  setError("");
+                  setStatus("");
+                  setPreviewUrl((currentUrl) => {
+                    if (currentUrl) URL.revokeObjectURL(currentUrl);
+                    return "";
+                  });
+                }}
+              >
+                Analyze another meal
+              </button>
+            ) : null}
           </div>
         )}
       </Card>
@@ -189,9 +268,17 @@ function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function MealPreviewResult({ analysis }: { analysis: MealAnalysis }) {
+function MealPreviewResult({ analysis, imageUrl }: { analysis: MealAnalysis; imageUrl?: string }) {
   return (
     <div className="grid gap-3">
+      {imageUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={imageUrl}
+          alt="Submitted meal"
+          className="aspect-[4/3] w-full rounded-md border border-slate-200 object-cover"
+        />
+      ) : null}
       <h3 className="text-2xl font-black text-ink">{analysis.mealName}</h3>
       <div className="grid grid-cols-2 gap-3">
         <Metric label="Meal Score" value={`${analysis.mealScore}/10`} />

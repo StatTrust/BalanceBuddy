@@ -19,8 +19,10 @@ export async function POST(request: Request) {
   }
 
   const isLocalTest = new URL(request.url).hostname === "localhost";
-  const used = request.headers.get("cookie")?.includes("free_meal_preview_used=true");
-  if (used && !isLocalTest) {
+  const cookieHeader = request.headers.get("cookie") || "";
+  const unlocked = cookieHeader.includes("waitlist_unlocked=true") || request.headers.get("x-waitlist-unlocked") === "true";
+  const used = cookieHeader.includes("free_meal_preview_used=true");
+  if (used && !unlocked && !isLocalTest) {
     return NextResponse.json({ error: "You already used your free meal check. Join the waitlist for early access." }, { status: 429 });
   }
 
@@ -63,7 +65,7 @@ export async function POST(request: Request) {
     });
 
     const response = NextResponse.json({ analysis });
-    if (!isLocalTest) {
+    if (!isLocalTest && !unlocked) {
       response.cookies.set("free_meal_preview_used", "true", {
         httpOnly: true,
         sameSite: "lax",

@@ -11,7 +11,6 @@ const waitlistSchema = z.object({
   primaryGoal: z.string().max(120).optional(),
   interestLevel: z.string().max(80).optional(),
   source: z.string().max(120).optional(),
-  referral: z.string().max(120).optional(),
   triedFreeScan: z.boolean().default(false),
 });
 
@@ -32,7 +31,7 @@ export async function POST(request: Request) {
         primary_goal: entry.primaryGoal || null,
         interest_level: entry.interestLevel || null,
         source: entry.source || null,
-        referral: entry.referral || null,
+        referral: null,
         tried_free_scan: entry.triedFreeScan,
       },
       { onConflict: "email" }
@@ -46,8 +45,15 @@ export async function POST(request: Request) {
     triedFreeScan: entry.triedFreeScan,
   });
 
-  return NextResponse.json({
+  const response = NextResponse.json({
     ok: true,
     stored: Boolean(hasSupabaseConfig() && env.SUPABASE_SERVICE_ROLE_KEY),
   });
+  response.cookies.set("waitlist_unlocked", "true", {
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 365,
+    path: "/",
+  });
+  return response;
 }
