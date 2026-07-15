@@ -35,6 +35,8 @@ export function WaitlistForm({
     event.preventDefault();
     setLoading(true);
     setMessage("");
+    let spotSaved = false;
+
     try {
       const res = await fetch("/api/waitlist", {
         method: "POST",
@@ -50,6 +52,15 @@ export function WaitlistForm({
         setMessage(body.error || "Could not save your spot yet.");
         return;
       }
+      spotSaved = true;
+
+      try {
+        window.sessionStorage.setItem("mealCoachWaitlistFormCompleted", "true");
+      } catch {
+        // Storage can be unavailable in private browsing; the in-memory event still unlocks the result.
+      }
+      window.dispatchEvent(new Event("mealCoachWaitlistFormCompleted"));
+      onJoined?.();
 
       const supabase = createSupabaseBrowserClient();
       const { error } = await supabase.auth.signInWithOtp({
@@ -61,18 +72,20 @@ export function WaitlistForm({
         },
       });
 
-      window.sessionStorage.setItem("mealCoachWaitlistFormCompleted", "true");
-      window.dispatchEvent(new Event("mealCoachWaitlistFormCompleted"));
-      onJoined?.();
-
       if (error) {
-        setMessage("Your spot is saved, but the login email could not be sent. Use Waitlist login to try again.");
+        console.error("waitlist.login_email_failed", { message: error.message, status: error.status });
+        setMessage(loginEmailFailureMessage(error.message, triedFreeScan));
         return;
       }
 
       setMessage("You're on the waitlist. Check your email and tap the secure link to activate unlimited access.");
-    } catch {
-      setMessage("Could not create your waitlist account yet. Please try again.");
+    } catch (error) {
+      console.error("waitlist.account_creation_failed", error);
+      setMessage(
+        spotSaved
+          ? savedSpotEmailFailureMessage(triedFreeScan)
+          : "Could not create your waitlist account yet. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -109,4 +122,20 @@ export function WaitlistForm({
       {message ? <p className="rounded-md bg-slate-100 p-3 text-sm font-semibold text-slate-700">{message}</p> : null}
     </form>
   );
+}
+
+function loginEmailFailureMessage(message: string, triedFreeScan: boolean) {
+  if (message.toLowerCase().includes("rate") || message.toLowerCase().includes("too many")) {
+    return triedFreeScan
+      ? "Your spot is saved and your meal result is unlocked. Too many login emails were requested, so wait a minute and then use Waitlist login."
+      : "Your spot is saved. Too many login emails were requested, so wait a minute and then use Waitlist login.";
+  }
+
+  return savedSpotEmailFailureMessage(triedFreeScan);
+}
+
+function savedSpotEmailFailureMessage(triedFreeScan: boolean) {
+  return triedFreeScan
+    ? "Your spot is saved and your meal result is unlocked, but the login email could not be sent. Use Waitlist login to try again."
+    : "Your spot is saved, but the login email could not be sent. Use Waitlist login to try again.";
 }

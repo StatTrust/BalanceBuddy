@@ -1,9 +1,12 @@
 import { createBrowserClient } from "@supabase/ssr";
-import { requireEnv } from "@/lib/env";
 
 export function createSupabaseBrowserClient() {
-  return createBrowserClient(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY")
-  );
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error("Supabase browser configuration is unavailable.");
+  }
+
+  return createBrowserClient(supabaseUrl, supabaseAnonKey);
 }
